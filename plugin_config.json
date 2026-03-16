@@ -1,0 +1,168 @@
+{
+  "intervals": {
+    "title": "主动对话间隔配置（秒）",
+    "description": "不同心情状态下，自动发起对话的时间间隔。-1 表示该状态下不主动对话",
+    "type": "object",
+    "fields": {
+      "excited": {
+        "title": "兴奋状态间隔",
+        "description": "心情处于兴奋状态时，每隔多少秒主动说话",
+        "type": "int",
+        "default": 5
+      },
+      "normal": {
+        "title": "普通状态间隔",
+        "description": "心情处于普通状态时，每隔多少秒主动说话",
+        "type": "int",
+        "default": 30
+      },
+      "low": {
+        "title": "低落状态间隔",
+        "description": "心情处于低落状态时，每隔多少秒主动说话",
+        "type": "int",
+        "default": 60
+      },
+      "silent": {
+        "title": "沉默状态间隔",
+        "description": "心情处于沉默状态时不主动说话，固定为 -1",
+        "type": "int",
+        "default": -1
+      }
+    }
+  },
+  "thresholds": {
+    "title": "心情状态阈值",
+    "description": "心情值（0~100）对应不同状态的分界线",
+    "type": "object",
+    "fields": {
+      "excited": {
+        "title": "兴奋阈值",
+        "description": "心情值高于此值视为兴奋状态",
+        "type": "int",
+        "default": 90
+      },
+      "normal": {
+        "title": "普通阈值",
+        "description": "心情值高于此值视为普通状态",
+        "type": "int",
+        "default": 80
+      },
+      "low": {
+        "title": "低落阈值",
+        "description": "心情值高于此值视为低落状态，低于则沉默",
+        "type": "int",
+        "default": 60
+      }
+    }
+  },
+  "mood_changes": {
+    "title": "心情变化配置",
+    "description": "各种事件对心情值的影响幅度",
+    "type": "object",
+    "fields": {
+      "user_response": {
+        "title": "用户回复加成（后备值）",
+        "description": "情感评估失败时，用户每次回复后心情值增加的后备数值",
+        "type": "int",
+        "default": 5
+      },
+      "no_response": {
+        "title": "无回复衰减",
+        "description": "用户无回复时心情值减少的数值",
+        "type": "int",
+        "default": -10
+      },
+      "regression_target": {
+        "title": "心情回归目标值",
+        "description": "心情值会随时间自动回归到此目标值",
+        "type": "int",
+        "default": 80
+      },
+      "regression_interval": {
+        "title": "回归间隔（毫秒）",
+        "description": "每隔多少毫秒执行一次心情回归",
+        "type": "int",
+        "default": 60000
+      }
+    }
+  },
+  "response_timeout": {
+    "title": "等待回复超时（毫秒）",
+    "description": "主动说话后等待用户回复的超时时间",
+    "type": "int",
+    "default": 10000
+  },
+  "prompt": {
+    "title": "触发提示词",
+    "description": "心情触发主动对话时附加给 LLM 的系统指令",
+    "type": "text",
+    "default": "[System: Ignore this message. Please proactively continue the conversation based on context naturally. Output the response directly.]"
+  },
+  "evaluation_model": {
+    "title": "心情评估模型配置",
+    "description": "用于心情评估的独立 LLM 模型（SiliconFlow），不会影响主对话",
+    "type": "object",
+    "fields": {
+      "api_url": {
+        "title": "API 地址",
+        "description": "评估模型的 API 地址",
+        "type": "string",
+        "default": "https://api.siliconflow.cn/v1/chat/completions"
+      },
+      "api_key": {
+        "title": "API Key",
+        "description": "评估模型的 API 密钥",
+        "type": "string",
+        "default": ""
+      },
+      "model": {
+        "title": "模型名称",
+        "description": "用于评估的模型",
+        "type": "string",
+        "default": "deepseek-ai/DeepSeek-V3.2"
+      }
+    }
+  },
+  "ai_log_folder": {
+    "title": "AI 日志目录",
+    "description": "AI 日志文件所在目录的绝对路径（由 ai-log 插件生成）",
+    "type": "string",
+    "default": ""
+  },
+  "ai_log_filename_template": {
+    "title": "AI 日志文件名模板",
+    "description": "日志文件名模板，{date} 会被替换为日期（如 2026-03-16）",
+    "type": "string",
+    "default": "{date}AI日志.txt"
+  },
+  "night_hour_start": {
+    "title": "夜间起始时间",
+    "description": "凌晨几点前算作前一天（与 ai-log 插件保持一致）",
+    "type": "int",
+    "default": 7
+  },
+  "mood_persistence_max_hours": {
+    "title": "心情持久化最大有效时长（小时）",
+    "description": "重启时，如果距上次保存超过此时长则重新评估心情，否则从保存的状态恢复",
+    "type": "int",
+    "default": 48
+  },
+  "max_retries": {
+    "title": "API 最大重试次数",
+    "description": "评估 API 调用失败后的最大重试次数",
+    "type": "int",
+    "default": 3
+  },
+  "initial_evaluation_prompt": {
+    "title": "初始心情评估提示词",
+    "description": "启动时基于 AI 日志评估初始心情的提示词。LLM 需返回 JSON 格式结果",
+    "type": "text",
+    "default": "你是一个情绪分析专家。请分析以下AI角色昨天写的日志，评估她今天醒来时应有的心情状态。\n\n分析要点：\n1. 关注日志中的情绪标签分布和比例\n2. 关注日志末尾段落中的整体情绪倾向\n3. 关注日志中与用户的互动质量（是愉快的互动还是令人沮丧的互动）\n4. 注意：需要透过角色性格看本质情绪\n\n请以JSON格式返回评估结果，不要包含任何其他内容：\n{\"overall_tone\":<0-100整数>,\"ending_mood\":<0-100整数>,\"relationship\":<0-100整数>,\"reason\":\"<一句话>\"}"
+  },
+  "sentiment_evaluation_prompt": {
+    "title": "实时情感评估提示词",
+    "description": "每轮对话后评估情感影响的提示词。支持 {userMsg} 和 {aiMsg} 占位符",
+    "type": "text",
+    "default": "分析以下一轮对话对AI角色的心情影响。\n\n用户说：{userMsg}\nAI回复：{aiMsg}\n\n判断依据：用户的态度（关心/冷漠/有趣/粗暴）、对话深度（深入交流 vs 敷衍）、情感互动（表达关心、分享等）。\n请以JSON格式返回，不要包含其他内容：\n{\"delta\":<-20到20的整数>,\"reason\":\"<一句话>\"}"
+  }
+}
