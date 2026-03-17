@@ -22,6 +22,16 @@ class MoodChatPlugin extends Plugin {
         }
     }
 
+    async onLLMRequest(request) {
+        if (!this._module) return;
+        const injection = this._module.getMoodInjection();
+        if (!injection) return;
+        const sys = request.messages.find(m => m.role === 'system');
+        if (sys) {
+            sys.content += '\n' + injection;
+        }
+    }
+
     async onLLMResponse(response) {
         if (!this._module) return;
 

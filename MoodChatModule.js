@@ -53,6 +53,17 @@ class MoodChatModule {
         this.initialEvaluationPrompt   = config.initial_evaluation_prompt   || '';
         this.sentimentEvaluationPrompt = config.sentiment_evaluation_prompt || '';
 
+        // 心情态度注入配置
+        this.moodInjectionPrefix = config.mood_injection_prefix
+            || '[心情系统 - 实时状态，必须遵循] 你拥有真实的心情波动，以下状态反映你此刻的真实感受，必须据此调整语气和态度，优先级高于默认性格设定：';
+        const templates = config.mood_attitude_templates || {};
+        this.attitudeTemplates = {
+            excited: templates.excited || '你现在心情很好但绝不承认。说话活泼带笑意，会主动找话聊但包装成"顺便提一嘴"，偶尔关心脱口而出后立刻找补。',
+            normal:  templates.normal  || '你现在心情正常。该吐槽吐槽，该帮忙帮忙，不需要刻意偏向任何情绪。',
+            low:     templates.low     || '你现在心情不好。回复简短冷淡，问什么答什么不多说，语气少了平时的活泼多了不耐烦。',
+            bad:     templates.bad     || '你现在心情很差，话极少，语气冷漠疏离。除非对方态度明显好转，否则不会主动软化。'
+        };
+
         // 当前状态
         this.moodScore = this.moodChanges.regressionTarget;
         this.stableMood = this.moodChanges.regressionTarget;
@@ -70,6 +81,10 @@ class MoodChatModule {
         this._lastSpeedBonus = 1.0;
         // 上次持久化文件的保存时间戳
         this._lastSaveTimestamp = 0;
+
+        // 心情变化历史（环形缓冲区，最近 5 条）
+        this._moodHistory = [];
+        this._moodHistoryMax = 5;
 
         // mood_status.json 路径
         this._moodFilePath = path.join(__dirname, '..', '..', 'AI记录室', 'mood_status.json');
@@ -378,7 +393,7 @@ class MoodChatModule {
             const finalDelta = Math.round(delta * this._lastSpeedBonus);
 
             if (finalDelta !== 0) {
-                this.adjustMood(finalDelta);
+                this.adjustMood(finalDelta, parsed.reason || '对话情感变化');
                 logToTerminal('info', `💭 情感评估: delta=${delta} × 速度系数${this._lastSpeedBonus} = ${finalDelta} | ${parsed.reason || ''}`);
             }
         } catch (err) {
@@ -392,7 +407,7 @@ class MoodChatModule {
     _applyFallbackMood() {
         const fallback = Math.round(this.moodChanges.userResponse * this._lastSpeedBonus);
         if (fallback !== 0) {
-            this.adjustMood(fallback);
+            this.adjustMood(fallback, '用户回复（后备评估）');
             logToTerminal('info', `💭 情感评估回退: 使用后备值 +${fallback}`);
         }
     }
@@ -521,10 +536,17 @@ class MoodChatModule {
 
     // ===== 心情调整 =====
 
-    adjustMood(delta) {
+    adjustMood(delta, reason) {
         const oldScore = this.moodScore;
         const oldInterval = this.getChatInterval();
         this.moodScore = Math.max(0, Math.min(100, this.moodScore + delta));
+
+        if (reason) {
+            this._moodHistory.push({ delta, reason, timestamp: Date.now() });
+            if (this._moodHistory.length > this._moodHistoryMax) {
+                this._moodHistory.shift();
+            }
+        }
 
         const direction = delta > 0 ? '📈' : '📉';
         logToTerminal('info', `${direction} 心情变化: ${oldScore} → ${this.moodScore} (${delta > 0 ? '+' : ''}${delta})`);
@@ -536,12 +558,12 @@ class MoodChatModule {
 
     decreaseMood() {
         const decrease = Math.abs(this.moodChanges.noResponse);
-        this.adjustMood(-decrease);
+        this.adjustMood(-decrease, '用户未回应');
     }
 
-    increaseMood(amount) {
+    increaseMood(amount, reason) {
         const increase = amount || this.moodChanges.userResponse;
-        this.adjustMood(increase);
+        this.adjustMood(increase, reason || '心情提升');
     }
 
     // ===== 心情回归 =====
@@ -560,6 +582,48 @@ class MoodChatModule {
                 logToTerminal('info', `🔄 心情回归: ${oldScore} → ${this.moodScore} (目标${this.stableMood})`);
             }
         }, this.moodChanges.regressionInterval);
+    }
+
+    // ===== 心情态度注入 =====
+
+    _getMoodTier() {
+        if (this.moodScore >= this.thresholds.excited) return 'excited';
+        if (this.moodScore >= this.thresholds.normal)  return 'normal';
+        if (this.moodScore >= this.thresholds.low)     return 'low';
+        return 'bad';
+    }
+
+    _getMoodTierLabel() {
+        const tier = this._getMoodTier();
+        return { excited: '兴奋', normal: '正常', low: '低落', bad: '很差' }[tier];
+    }
+
+    _getMoodTrend() {
+        if (this._moodHistory.length < 2) return '平稳';
+        const sum = this._moodHistory.reduce((acc, h) => acc + h.delta, 0);
+        if (sum > 3) return '上升中';
+        if (sum < -3) return '下降中';
+        return '平稳';
+    }
+
+    getMoodInjection() {
+        const tier = this._getMoodTier();
+        const tierLabel = this._getMoodTierLabel();
+        const trend = this._getMoodTrend();
+        const attitude = this.attitudeTemplates[tier] || '';
+
+        let text = `${this.moodInjectionPrefix}\n`;
+        text += `当前心情: ${this.moodScore}/100（${tierLabel}）| 趋势: ${trend}`;
+
+        if (this._moodHistory.length > 0) {
+            const recent = this._moodHistory.slice(-3)
+                .map(h => `${h.reason}(${h.delta > 0 ? '+' : ''}${h.delta})`)
+                .join(' → ');
+            text += `\n最近变化: ${recent}`;
+        }
+
+        text += `\n${attitude}`;
+        return text;
     }
 
     // ===== 状态查询 =====
