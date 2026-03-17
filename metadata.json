@@ -1,9 +1,9 @@
 {
   "name": "mood-chat",
-  "displayName": "心情对话系统",
+  "displayName": "潮汐之音",
   "version": "1.0.0",
   "author": "A-night-owl-Rabbit",
-  "description": "基于心情评估的智能主动对话模块。通过 AI 日志评估、实时对话情感分析、回复速度感知等多维度影响心情值，根据心情自动调整对话频率",
+  "description": "潮汐之音 —— 基于心情评估的智能主动对话模块。通过 AI 日志评估、实时对话情感分析、回复速度感知等多维度影响心情值，根据心情自动调整对话频率",
   "framework_version": ">=1.0.0",
   "main": "index.js",
   "lang": "js"
