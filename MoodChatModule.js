@@ -192,7 +192,9 @@ class MoodChatModule {
                 return false;
             }
 
-            const steps = Math.floor(offlineMs / this.moodChanges.regressionInterval);
+            // 离线回归速率 = 在线的 1/5（离线时 AI 没有经历任何事，不应快速回归）
+            const offlineRegressionInterval = this.moodChanges.regressionInterval * 5;
+            const steps = Math.floor(offlineMs / offlineRegressionInterval);
             let score = raw.score;
             const target = this.moodChanges.regressionTarget;
             for (let i = 0; i < steps; i++) {
