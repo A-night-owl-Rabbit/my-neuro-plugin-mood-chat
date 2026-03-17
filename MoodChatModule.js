@@ -159,7 +159,7 @@ class MoodChatModule {
             if (this._isNewLogicalDay(this._lastSaveTimestamp)) {
                 logToTerminal('info', '🌅 新的一天，异步刷新心情评估...');
                 this._evaluateFromAILog().catch(err => {
-                    logToTerminal('error', `❌ AI 日志心情评估失败: ${err.message}`);
+                    this._applyInitFallback(`异常: ${err.message}`);
                 });
             }
         } else {
@@ -168,7 +168,7 @@ class MoodChatModule {
 
             logToTerminal('info', '🔍 无持久化记录，异步评估初始心情...');
             this._evaluateFromAILog().catch(err => {
-                logToTerminal('error', `❌ AI 日志心情评估失败: ${err.message}`);
+                this._applyInitFallback(`异常: ${err.message}`);
             });
         }
 
@@ -235,7 +235,7 @@ class MoodChatModule {
     async _evaluateFromAILog() {
         const logContent = this._findRecentAILog();
         if (!logContent) {
-            logToTerminal('info', '📝 未找到 AI 日志，保持默认心情');
+            this._applyInitFallback('未找到 AI 日志文件');
             return;
         }
 
@@ -247,7 +247,10 @@ class MoodChatModule {
             0.4
         );
 
-        if (!result) return;
+        if (!result) {
+            this._applyInitFallback('评估 API 调用失败');
+            return;
+        }
 
         try {
             const jsonStr = result.match(/\{[\s\S]*\}/)?.[0];
@@ -263,12 +266,19 @@ class MoodChatModule {
 
             const oldScore = this.moodScore;
             this.moodScore = score;
+            this.stableMood = score;
 
             logToTerminal('info', `✨ AI日志评估完成: ${oldScore} → ${score}分 (基调${tone} 结尾${ending} 关系${relation}) 原因: ${parsed.reason || '无'}`);
             this.scheduleNextChat();
         } catch (err) {
             logToTerminal('warn', `⚠️ 解析评估结果失败: ${err.message}，原始内容: ${result.substring(0, 200)}`);
+            this._applyInitFallback('评估结果解析失败');
         }
+    }
+
+    // 初始评估失败时的回退：保持当前心情值并明确告知
+    _applyInitFallback(reason) {
+        logToTerminal('warn', `⚠️ 初始心情评估失败（${reason}），当前心情 ${this.moodScore} 分将作为起始值使用`);
     }
 
     // 查找最近的 AI 日志文件
