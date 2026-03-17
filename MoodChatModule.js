@@ -68,6 +68,8 @@ class MoodChatModule {
         this._sentimentEvaluating = false;
         // 上次用户回复时的速度系数，供异步情感评估回调使用
         this._lastSpeedBonus = 1.0;
+        // 上次持久化文件的保存时间戳
+        this._lastSaveTimestamp = 0;
 
         // mood_status.json 路径
         this._moodFilePath = path.join(__dirname, '..', '..', 'AI记录室', 'mood_status.json');
@@ -81,8 +83,6 @@ class MoodChatModule {
         eventBus.on(Events.TTS_INTERRUPTED, this._onTtsIntBound = () => { this.ttsEndTime = Date.now(); });
 
         this.startMoodRegression();
-        this.startMoodFileSync();
-
         this._initMood();
     }
 
@@ -150,21 +150,29 @@ class MoodChatModule {
     // ===== Task 1 + 2: 初始化心情（持久化恢复 → AI日志评估 → 默认值） =====
 
     async _initMood() {
-        // 优先尝试从持久化文件恢复
-        if (this._restoreMoodFromFile()) {
+        const restored = this._restoreMoodFromFile();
+
+        if (restored) {
             logToTerminal('info', `✅ 从持久化文件恢复心情: ${this.moodScore}分`);
             this.scheduleNextChat();
-            return;
+
+            if (this._isNewLogicalDay(this._lastSaveTimestamp)) {
+                logToTerminal('info', '🌅 新的一天，异步刷新心情评估...');
+                this._evaluateFromAILog().catch(err => {
+                    logToTerminal('error', `❌ AI 日志心情评估失败: ${err.message}`);
+                });
+            }
+        } else {
+            this.moodScore = this.moodChanges.regressionTarget;
+            this.scheduleNextChat();
+
+            logToTerminal('info', '🔍 无持久化记录，异步评估初始心情...');
+            this._evaluateFromAILog().catch(err => {
+                logToTerminal('error', `❌ AI 日志心情评估失败: ${err.message}`);
+            });
         }
 
-        // 持久化恢复失败，先用默认值启动，异步评估
-        this.moodScore = this.moodChanges.regressionTarget;
-        this.scheduleNextChat();
-
-        // 异步基于 AI 日志评估（不阻塞）
-        this._evaluateFromAILog().catch(err => {
-            logToTerminal('error', `❌ AI 日志心情评估失败: ${err.message}`);
-        });
+        this.startMoodFileSync();
     }
 
     // Task 1: 从 mood_status.json 恢复
@@ -175,6 +183,8 @@ class MoodChatModule {
             const raw = JSON.parse(fs.readFileSync(this._moodFilePath, 'utf8'));
             if (!raw.timestamp || !Number.isFinite(raw.score)) return false;
 
+            this._lastSaveTimestamp = raw.timestamp;
+
             const offlineMs = Date.now() - raw.timestamp;
             const maxMs = this.persistenceMaxHours * 3600000;
             if (offlineMs > maxMs) {
@@ -182,7 +192,6 @@ class MoodChatModule {
                 return false;
             }
 
-            // 按回归间隔计算离线衰减步数
             const steps = Math.floor(offlineMs / this.moodChanges.regressionInterval);
             let score = raw.score;
             const target = this.moodChanges.regressionTarget;
@@ -201,6 +210,23 @@ class MoodChatModule {
             logToTerminal('warn', `⚠️ 读取心情持久化文件失败: ${err.message}`);
             return false;
         }
+    }
+
+    // 判断当前是否已进入新的"逻辑日"（nightHourStart 前算前一天）
+    _isNewLogicalDay(savedTimestamp) {
+        if (!savedTimestamp) return true;
+
+        const getLogicalDate = (ts) => {
+            const d = new Date(ts);
+            if (d.getHours() < this.nightHourStart) {
+                d.setDate(d.getDate() - 1);
+            }
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+
+        const savedDay = getLogicalDate(savedTimestamp);
+        const nowDay = getLogicalDate(Date.now());
+        return savedDay !== nowDay;
     }
 
     // Task 2: 基于 AI 日志评估初始心情
