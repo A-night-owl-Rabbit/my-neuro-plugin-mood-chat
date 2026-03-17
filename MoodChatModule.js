@@ -54,6 +54,7 @@ class MoodChatModule {
         this.sentimentEvaluationPrompt = config.sentiment_evaluation_prompt || '';
 
         // 心情态度注入配置
+        this.moodInjectionEnabled = config.mood_injection_enabled !== false;
         this.moodInjectionPrefix = config.mood_injection_prefix
             || '[心情系统 - 实时状态，必须遵循] 你拥有真实的心情波动，以下状态反映你此刻的真实感受，必须据此调整语气和态度，优先级高于默认性格设定：';
         const templates = config.mood_attitude_templates || {};
@@ -607,6 +608,7 @@ class MoodChatModule {
     }
 
     getMoodInjection() {
+        if (!this.moodInjectionEnabled) return null;
         const tier = this._getMoodTier();
         const tierLabel = this._getMoodTierLabel();
         const trend = this._getMoodTrend();
