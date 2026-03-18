@@ -2,10 +2,14 @@
 const { Plugin } = require('../../../js/core/plugin-base.js');
 const { MoodChatModule } = require('./MoodChatModule.js');
 
+const { eventBus } = require('../../../js/core/event-bus.js');
+const { Events } = require('../../../js/core/events.js');
+
 class MoodChatPlugin extends Plugin {
     constructor(metadata, context) {
         super(metadata, context);
         this._module = null;
+        this._isUserTriggered = false;
     }
 
     async onStart() {
@@ -13,12 +17,18 @@ class MoodChatPlugin extends Plugin {
         this._module = new MoodChatModule(pluginConfig);
         global.moodChatModule = this._module;
         this._module.start();
+
+        this._onUserMsgBound = () => { this._isUserTriggered = true; };
+        eventBus.on(Events.USER_MESSAGE_RECEIVED, this._onUserMsgBound);
     }
 
     async onStop() {
         if (this._module) {
             this._module.stop();
             this._module = null;
+        }
+        if (this._onUserMsgBound) {
+            eventBus.off(Events.USER_MESSAGE_RECEIVED, this._onUserMsgBound);
         }
     }
 
@@ -34,6 +44,10 @@ class MoodChatPlugin extends Plugin {
 
     async onLLMResponse(response) {
         if (!this._module) return;
+
+        // 只对用户真正发言触发的回复进行情感评估，跳过插件/工具触发的 LLM 调用
+        if (!this._isUserTriggered) return;
+        this._isUserTriggered = false;
 
         const voiceChat = global.voiceChat;
         if (!voiceChat?.messages) return;
