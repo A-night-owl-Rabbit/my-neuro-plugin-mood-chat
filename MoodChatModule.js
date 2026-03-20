@@ -225,7 +225,8 @@ class MoodChatModule {
             logToTerminal('info', `🔄 离线 ${Math.round(offlineMs / 60000)} 分钟，心情 ${raw.score} → ${this.moodScore} (回归 ${steps} 步)`);
             return true;
         } catch (err) {
-            logToTerminal('warn', `⚠️ 读取心情持久化文件失败: ${err.message}`);
+            logToTerminal('warn', `⚠️ 读取心情持久化文件失败: ${err.message}，已删除损坏文件`);
+            try { fs.unlinkSync(this._moodFilePath); } catch (_) {}
             return false;
         }
     }
@@ -650,7 +651,9 @@ class MoodChatModule {
                 waitingResponse: this.waitingForResponse,
                 timestamp: Date.now()
             };
-            fs.writeFileSync(this._moodFilePath, JSON.stringify(moodData, null, 2), 'utf8');
+            const tmpPath = this._moodFilePath + '.tmp';
+            fs.writeFileSync(tmpPath, JSON.stringify(moodData, null, 2), 'utf8');
+            fs.renameSync(tmpPath, this._moodFilePath);
         } catch (_) { /* 静默失败 */ }
     }
 
