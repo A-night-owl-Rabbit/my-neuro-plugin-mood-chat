@@ -458,8 +458,8 @@ class MoodChatModule {
         }
 
         if (appState.isPlayingTTS() || appState.isProcessingBarrage() || appState.isProcessingUserInput()) {
-            logToTerminal('info', '⏸️ 系统繁忙，延迟主动对话');
-            setTimeout(() => this.executeChat(), 5000);
+            logToTerminal('info', '⏸️ 系统繁忙，跳过本次主动对话并重新调度');
+            this.scheduleNextChat();
             return;
         }
 
