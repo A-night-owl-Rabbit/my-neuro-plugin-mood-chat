@@ -1,6 +1,8 @@
 // plugins/built-in/mood-chat/index.js
 const { Plugin } = require('../../../js/core/plugin-base.js');
-const { MoodChatModule } = require('./MoodChatModule.js');
+const { MoodChatModule } = require('../../../js/ai/MoodChatModule.js');
+const { SceneDetector } = require('./SceneDetector.js');
+const { ProactiveEnhancer } = require('./ProactiveEnhancer.js');
 
 const { eventBus } = require('../../../js/core/event-bus.js');
 const { Events } = require('../../../js/core/events.js');
@@ -20,9 +22,22 @@ class MoodChatPlugin extends Plugin {
 
         this._onUserMsgBound = () => { this._isUserTriggered = true; };
         eventBus.on(Events.USER_MESSAGE_RECEIVED, this._onUserMsgBound);
+
+        this._sceneDetector = new SceneDetector(pluginConfig);
+        this._enhancer = new ProactiveEnhancer(this._module, this._sceneDetector, pluginConfig);
+        this._sceneDetector.start();
+        this._enhancer.install();
     }
 
     async onStop() {
+        if (this._enhancer) {
+            this._enhancer.uninstall();
+            this._enhancer = null;
+        }
+        if (this._sceneDetector) {
+            this._sceneDetector.stop();
+            this._sceneDetector = null;
+        }
         if (this._module) {
             this._module.stop();
             this._module = null;

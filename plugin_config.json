@@ -8,19 +8,19 @@
         "title": "兴奋状态间隔",
         "description": "心情处于兴奋状态时，每隔多少秒主动说话",
         "type": "int",
-        "default": 5
+        "default": 250
       },
       "normal": {
         "title": "普通状态间隔",
         "description": "心情处于普通状态时，每隔多少秒主动说话",
         "type": "int",
-        "default": 30
+        "default": 300
       },
       "low": {
         "title": "低落状态间隔",
         "description": "心情处于低落状态时，每隔多少秒主动说话",
         "type": "int",
-        "default": 60
+        "default": 600
       },
       "silent": {
         "title": "沉默状态间隔",
@@ -70,7 +70,7 @@
         "title": "无回复衰减",
         "description": "用户无回复时心情值减少的数值",
         "type": "int",
-        "default": -10
+        "default": -5
       },
       "regression_target": {
         "title": "心情回归目标值",
@@ -90,11 +90,11 @@
     "title": "等待回复超时（毫秒）",
     "description": "主动说话后等待用户回复的超时时间",
     "type": "int",
-    "default": 10000
+    "default": 60000
   },
   "prompt": {
     "title": "触发提示词",
-    "description": "心情触发主动对话时附加给 LLM 的系统指令",
+    "description": "心情触发主动对话时附加给 LLM 的系统指令。建议根据你的 AI 角色性格自定义",
     "type": "text",
     "default": "[System: Ignore this message. Please proactively continue the conversation based on context naturally. Output the response directly.]"
   },
@@ -111,7 +111,7 @@
       },
       "api_key": {
         "title": "API Key",
-        "description": "评估模型的 API 密钥",
+        "description": "评估模型的 API 密钥（必填）",
         "type": "string",
         "default": ""
       },
@@ -157,13 +157,13 @@
     "title": "初始心情评估提示词",
     "description": "启动时基于 AI 日志评估初始心情的提示词。LLM 需返回 JSON 格式结果",
     "type": "text",
-    "default": "你是一个情绪分析专家。请分析以下AI角色昨天写的日志，评估她今天醒来时应有的心情状态。\n\n分析要点：\n1. 关注日志中的情绪标签（如<得意>、<生气>、<害羞>等）的分布和比例\n2. 关注【总而言之】段落中的整体情绪倾向\n3. 关注日志中与主人的互动质量（是愉快的互动还是令人沮丧的互动）\n4. 注意：AI角色是傲娇性格，表面的\"嫌弃\"和\"吐槽\"往往代表开心，要透过傲娇看本质\n\n请以JSON格式返回评估结果，不要包含任何其他内容：\n{\"overall_tone\":<0-100整数>,\"ending_mood\":<0-100整数>,\"relationship\":<0-100整数>,\"reason\":\"<一句话>\"}"
+    "default": "你是一个情绪分析专家。请分析以下AI角色昨天写的日志，评估它今天醒来时应有的心情状态。\n\n分析要点：\n1. 关注日志中的情绪标签分布和比例\n2. 关注日志中的整体情绪倾向\n3. 关注日志中与用户的互动质量（是愉快的互动还是令人沮丧的互动）\n\n请以JSON格式返回评估结果，不要包含任何其他内容：\n{\"overall_tone\":<0-100整数>,\"ending_mood\":<0-100整数>,\"relationship\":<0-100整数>,\"reason\":\"<一句话>\"}"
   },
   "sentiment_evaluation_prompt": {
     "title": "实时情感评估提示词",
     "description": "每轮对话后评估情感影响的提示词。支持 {userMsg} 和 {aiMsg} 占位符",
     "type": "text",
-    "default": "评估以下一轮对话对AI角色心情的影响。delta 必须严格反映对话质量，不要默认给正值。\n\n用户说：{userMsg}\nAI回复：{aiMsg}\n\n评分标准（严格遵守）：\n- delta > 0（心情变好）：用户表达了关心、认可、分享有趣内容、深入交流、主动找话题\n- delta = 0（心情不变）：普通闲聊、日常问答、中性话题、无特别情感倾向\n- delta < 0（心情变差）：用户态度冷漠敷衍、单字回复、忽视AI的话题、粗暴无礼、长时间不理人后突然随意搭话\n\n关键规则：\n1. 大多数普通对话应该是 delta=0 到 delta=3 之间，不要轻易给高分\n2. 只有真正有情感温度的互动才值得 delta≥5\n3. 敷衍式回复（如\"嗯\"\"哦\"\"好\"单字）必须给负值（-3到-8）\n4. 无意义或纯指令式对话（如\"帮我查个东西\"）= 0，不加分\n\n请以JSON格式返回，不要包含其他内容：\n{\"delta\":<-20到20的整数>,\"reason\":\"<一句话>\"}"
+    "default": "评估以下一轮对话对AI角色心情的影响。delta 必须严格反映对话质量，不要默认给正值。\n\n用户说：{userMsg}\nAI回复：{aiMsg}\n\n评分标准（严格遵守）：\n- delta > 0（心情变好）：用户表达了关心、认可、分享有趣内容、深入交流、主动找话题\n- delta = 0（心情不变）：普通闲聊、日常问答、中性话题、无特别情感倾向\n- delta < 0（心情变差）：用户态度冷漠敷衍、单字回复、忽视AI的话题、粗暴无礼\n\n关键规则：\n1. 大多数普通对话应该是 delta=0 到 delta=3 之间，不要轻易给高分\n2. 只有真正有情感温度的互动才值得 delta>=5\n3. 敷衍式回复（如单字\"嗯\"\"哦\"\"好\"）必须给负值（-3到-8）\n4. 纯指令式对话（如\"帮我查个东西\"）= 0，不加分\n\n请以JSON格式返回，不要包含其他内容：\n{\"delta\":<-20到20的整数>,\"reason\":\"<一句话>\"}"
   },
   "mood_injection_enabled": {
     "title": "启用心情态度注入",
@@ -179,7 +179,7 @@
   },
   "mood_attitude_templates": {
     "title": "心情态度模板",
-    "description": "不同心情区间对应的态度指令，注入到 LLM system prompt 中影响说话风格",
+    "description": "不同心情区间对应的态度指令，注入到 LLM system prompt 中影响说话风格。建议根据 AI 角色性格自定义",
     "type": "object",
     "fields": {
       "excited": {
@@ -207,5 +207,90 @@
         "default": "你现在心情很差，话极少，语气冷漠疏离。除非对方态度明显好转，否则不会主动软化。"
       }
     }
+  },
+  "scene_vision_model": {
+    "title": "场景识别视觉模型",
+    "description": "独立视觉模型，用于截图场景分类。必须使用支持图片输入的 VL 模型（如 Qwen2.5-VL），纯文本模型会返回 404。与主 LLM 隔离避免并发冲突",
+    "type": "object",
+    "fields": {
+      "api_url": {
+        "title": "API 地址",
+        "type": "string",
+        "default": "https://api.siliconflow.cn/v1/chat/completions"
+      },
+      "api_key": {
+        "title": "API Key",
+        "description": "SiliconFlow API 密钥，可与心情评估模型共用",
+        "type": "string",
+        "default": ""
+      },
+      "model": {
+        "title": "模型名称（必须是视觉模型，如 VL 系列）",
+        "type": "string",
+        "default": "Qwen/Qwen2.5-VL-7B-Instruct"
+      }
+    }
+  },
+  "scene_detection_enabled": {
+    "title": "启用场景感知",
+    "description": "是否启用基于截图的场景检测，用于调整主动对话频率和内容",
+    "type": "boolean",
+    "default": true
+  },
+  "scene_check_interval": {
+    "title": "场景检测间隔（毫秒）",
+    "description": "每隔多少毫秒检测一次屏幕场景变化",
+    "type": "int",
+    "default": 30000
+  },
+  "scene_interval_multipliers": {
+    "title": "场景间隔系数",
+    "description": "各场景类型的主动对话间隔倍率。<1 更频繁（陪伴型），>1 更稀疏（专注型）",
+    "type": "object",
+    "fields": {
+      "coding": { "title": "编程", "type": "float", "default": 2.0 },
+      "gaming": { "title": "游戏", "type": "float", "default": 0.7 },
+      "video": { "title": "视频/动漫", "type": "float", "default": 0.7 },
+      "office": { "title": "办公", "type": "float", "default": 1.5 },
+      "reading": { "title": "阅读", "type": "float", "default": 3.0 },
+      "browsing": { "title": "浏览", "type": "float", "default": 1.0 },
+      "idle": { "title": "空闲", "type": "float", "default": 0.5 }
+    }
+  },
+  "anti_repeat_enabled": {
+    "title": "启用防重复",
+    "description": "对专注型场景（编程、办公、阅读）限制同场景连续主动对话次数。陪伴型场景（游戏、视频）不受限",
+    "type": "boolean",
+    "default": true
+  },
+  "max_same_scene_chats": {
+    "title": "同场景连续对话上限",
+    "description": "专注型场景下，连续在同一场景主动对话的最大次数，超过则跳过直到场景变化",
+    "type": "int",
+    "default": 2
+  },
+  "task_end_enabled": {
+    "title": "启用任务收尾感",
+    "description": "当用户从工作场景（编程/办公）切换到休闲场景（游戏/视频/浏览）时，主动说一句收尾的话",
+    "type": "boolean",
+    "default": true
+  },
+  "task_end_min_duration": {
+    "title": "触发收尾的最短工作时长（毫秒）",
+    "description": "工作场景持续超过此时长后切换到休闲，才触发收尾感对话。默认 30 分钟",
+    "type": "int",
+    "default": 1800000
+  },
+  "time_aware_enabled": {
+    "title": "启用时间感知",
+    "description": "根据当前时段（早上/下午/晚上/深夜）调整心情注入中的语气指引",
+    "type": "boolean",
+    "default": true
+  },
+  "late_night_multiplier": {
+    "title": "深夜间隔倍率",
+    "description": "23:00~6:00 期间，主动对话间隔乘以此倍率，减少深夜打扰",
+    "type": "float",
+    "default": 2.0
   }
 }
