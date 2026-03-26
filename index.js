@@ -1,6 +1,6 @@
 // plugins/built-in/mood-chat/index.js
 const { Plugin } = require('../../../js/core/plugin-base.js');
-const { MoodChatModule } = require('../../../js/ai/MoodChatModule.js');
+const { MoodChatModule } = require('./MoodChatModule.js');
 const { SceneDetector } = require('./SceneDetector.js');
 const { ProactiveEnhancer } = require('./ProactiveEnhancer.js');
 
@@ -41,6 +41,7 @@ class MoodChatPlugin extends Plugin {
         if (this._module) {
             this._module.stop();
             this._module = null;
+            global.moodChatModule = null;
         }
         if (this._onUserMsgBound) {
             eventBus.off(Events.USER_MESSAGE_RECEIVED, this._onUserMsgBound);

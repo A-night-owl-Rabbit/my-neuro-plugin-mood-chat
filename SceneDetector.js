@@ -1,13 +1,15 @@
 const { ipcRenderer } = require('electron');
 const { logToTerminal } = require('../../../js/api-utils.js');
 
+const VALID_SCENE_TYPES = ['coding', 'gaming', 'video', 'office', 'reading', 'browsing', 'chat', 'music', 'design', 'idle'];
+
 class SceneDetector {
     constructor(config) {
         const vm = config.scene_vision_model || {};
         this._apiUrl = (vm.api_url || '').trim();
         this._apiKey = (vm.api_key || '').trim();
         this._model  = (vm.model || '').trim();
-        this._enabled = config.scene_detection_enabled !== false;
+        this._enabled = SceneDetector._toBool(config.scene_detection_enabled, true);
         this._checkInterval = config.scene_check_interval || 30000;
 
         this._lastScreenHash = '';
@@ -16,7 +18,7 @@ class SceneDetector {
         this._historyMax = 10;
         this._changeCallbacks = [];
         this._timer = null;
-        this._polling = false;
+        this._running = false;
         this._pendingScene = null;
         this._pendingCount = 0;
     }
@@ -37,30 +39,46 @@ class SceneDetector {
         }
     }
 
+    offSceneChange(fn) {
+        const idx = this._changeCallbacks.indexOf(fn);
+        if (idx !== -1) {
+            this._changeCallbacks.splice(idx, 1);
+        }
+    }
+
     start() {
-        if (this._timer) return;
+        if (this._running) return;
         if (!this._enabled || !this._apiUrl || !this._apiKey || !this._model) {
             logToTerminal('info', '场景检测未启用或未配置视觉模型，跳过');
             return;
         }
+        this._running = true;
         logToTerminal('info', `场景检测已启动 | 间隔: ${this._checkInterval}ms | 模型: ${this._model}`);
-        this._poll();
-        this._timer = setInterval(() => this._poll(), this._checkInterval);
+        this._schedulePoll(0);
     }
 
     stop() {
+        this._running = false;
         if (this._timer) {
-            clearInterval(this._timer);
+            clearTimeout(this._timer);
             this._timer = null;
         }
         logToTerminal('info', '场景检测已停止');
     }
 
+    _schedulePoll(delay) {
+        if (this._timer) clearTimeout(this._timer);
+        this._timer = setTimeout(async () => {
+            await this._poll();
+            if (this._running) {
+                this._schedulePoll(this._checkInterval);
+            }
+        }, delay);
+    }
+
     // ===== 内部逻辑 =====
 
     async _poll() {
-        if (this._polling) return;
-        this._polling = true;
         try {
             const screenshot = await this._takeScreenshot();
             if (!screenshot) return;
@@ -122,8 +140,6 @@ class SceneDetector {
             }
         } catch (e) {
             logToTerminal('warn', `场景检测轮询异常: ${e.message}`);
-        } finally {
-            this._polling = false;
         }
     }
 
@@ -189,8 +205,11 @@ class SceneDetector {
             const match = text.match(/\{[\s\S]*\}/);
             if (match) {
                 const json = JSON.parse(match[0]);
-                if (json.type) {
+                if (json.type && VALID_SCENE_TYPES.includes(json.type)) {
                     return { type: json.type, label: json.label || json.type };
+                }
+                if (json.type) {
+                    logToTerminal('warn', `场景分类返回未知类型「${json.type}」，已回退为 unknown`);
                 }
             }
         } catch (e) {
@@ -199,5 +218,11 @@ class SceneDetector {
         return { type: 'unknown', label: '未知' };
     }
 }
+
+SceneDetector._toBool = function(val, defaultVal = true) {
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') return val.toLowerCase() !== 'false';
+    return defaultVal;
+};
 
 module.exports = { SceneDetector };

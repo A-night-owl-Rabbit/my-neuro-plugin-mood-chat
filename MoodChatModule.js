@@ -54,7 +54,7 @@ class MoodChatModule {
         this.sentimentEvaluationPrompt = config.sentiment_evaluation_prompt || '';
 
         // 心情态度注入配置
-        this.moodInjectionEnabled = config.mood_injection_enabled !== false;
+        this.moodInjectionEnabled = MoodChatModule._toBool(config.mood_injection_enabled, true);
         this.moodInjectionPrefix = config.mood_injection_prefix
             || '[心情系统 - 实时状态，必须遵循] 你拥有真实的心情波动，以下状态反映你此刻的真实感受，必须据此调整语气和态度，优先级高于默认性格设定：';
         const templates = config.mood_attitude_templates || {};
@@ -88,7 +88,7 @@ class MoodChatModule {
         this._moodHistoryMax = 5;
 
         // mood_status.json 路径
-        this._moodFilePath = path.join(__dirname, '..', '..', 'AI记录室', 'mood_status.json');
+        this._moodFilePath = path.join(__dirname, '..', '..', '..', 'AI记录室', 'mood_status.json');
     }
 
     // ===== 生命周期 =====
@@ -627,6 +627,12 @@ class MoodChatModule {
 
         text += `\n${attitude}`;
         return text;
+    }
+
+    static _toBool(val, defaultVal = true) {
+        if (typeof val === 'boolean') return val;
+        if (typeof val === 'string') return val.toLowerCase() !== 'false';
+        return defaultVal;
     }
 
     // ===== 状态查询 =====

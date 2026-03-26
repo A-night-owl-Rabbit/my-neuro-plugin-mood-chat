@@ -4,6 +4,13 @@ const { logToTerminal } = require('../../../js/api-utils.js');
 
 const COMPANION_SCENES = ['gaming', 'video'];
 const RECENT_TOPICS_MAX = 8;
+const TOPIC_EXPIRY_MS = 3600000;
+
+function _toBool(val, defaultVal = true) {
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') return val.toLowerCase() !== 'false';
+    return defaultVal;
+}
 
 const DEFAULT_SCENE_MULTIPLIERS = {
     coding: 2.0,
@@ -59,6 +66,10 @@ class ProactiveEnhancer {
         if (this._origGetMoodInjection) {
             this._module.getMoodInjection = this._origGetMoodInjection;
         }
+        if (this._sceneChangeHandler && this._sceneDetector) {
+            this._sceneDetector.offSceneChange(this._sceneChangeHandler);
+            this._sceneChangeHandler = null;
+        }
 
         this._installed = false;
         logToTerminal('info', '主动对话增强已卸载，方法已恢复');
@@ -100,8 +111,13 @@ class ProactiveEnhancer {
         module.executeChat = async function () {
             const scene = self._sceneDetector.getCurrentScene();
 
+            // 清除过期话题记录，防止永久死锁
+            const now = Date.now();
+            const expiry = self._config.topic_expiry_ms || TOPIC_EXPIRY_MS;
+            self._recentTopics = self._recentTopics.filter(t => now - t.time < expiry);
+
             // 防重复：仅对非陪伴型场景限制
-            if (self._config.anti_repeat_enabled !== false
+            if (_toBool(self._config.anti_repeat_enabled, true)
                 && !COMPANION_SCENES.includes(scene.type)
                 && scene.type !== 'unknown') {
                 const maxSame = self._config.max_same_scene_chats || 2;
@@ -139,7 +155,7 @@ class ProactiveEnhancer {
         this._module.getMoodInjection = function () {
             const base = origFn();
             if (!base) return base;
-            if (self._config.time_aware_enabled === false) return base;
+            if (!_toBool(self._config.time_aware_enabled, true)) return base;
 
             const hour = new Date().getHours();
             let timeHint;
@@ -159,7 +175,7 @@ class ProactiveEnhancer {
         const module = this._module;
 
         this._sceneChangeHandler = (oldScene, newScene) => {
-            if (self._config.task_end_enabled === false) return;
+            if (!_toBool(self._config.task_end_enabled, true)) return;
 
             const workTypes = ['coding', 'office'];
             const restTypes = ['video', 'gaming', 'browsing', 'idle'];
@@ -178,6 +194,7 @@ class ProactiveEnhancer {
             logToTerminal('info', `任务收尾感触发: ${oldScene.label}(${minutes}min) → ${newScene.label}`);
 
             setTimeout(async () => {
+                if (!self._installed) return;
                 try {
                     const { appState } = require('../../../js/core/app-state.js');
                     if (appState.isPlayingTTS() || appState.isProcessingUserInput()) return;
