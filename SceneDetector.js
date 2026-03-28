@@ -1,7 +1,16 @@
 const { ipcRenderer } = require('electron');
 const { logToTerminal } = require('../../../js/api-utils.js');
 
+let detectGameFromProcesses = null;
+let getForegroundWindowProcess = null;
+
+try {
+    ({ detectGameFromProcesses, getForegroundWindowProcess } = require('../../community/loki-shadow/window-detector.js'));
+} catch (e) {}
+
 const VALID_SCENE_TYPES = ['coding', 'gaming', 'video', 'office', 'reading', 'browsing', 'chat', 'music', 'design', 'idle'];
+const CODING_WINDOW_KEYWORDS = ['visual studio code', 'vscode', 'cursor', 'trae', 'windsurf', 'webstorm', 'intellij', 'idea', 'pycharm', 'clion', 'goland', 'rider', 'visual studio', 'devenv', 'android studio', 'xcode', 'zed', 'sublime text', 'notepad++'];
+const CODING_PROCESS_KEYWORDS = ['code', 'cursor', 'trae', 'windsurf', 'webstorm64', 'idea64', 'pycharm64', 'clion64', 'goland64', 'rider64', 'devenv', 'studio64', 'zed'];
 
 class SceneDetector {
     constructor(config) {
@@ -11,6 +20,7 @@ class SceneDetector {
         this._model  = (vm.model || '').trim();
         this._enabled = SceneDetector._toBool(config.scene_detection_enabled, true);
         this._checkInterval = config.scene_check_interval || 30000;
+        this._windowCrossCheckEnabled = SceneDetector._toBool(config.scene_window_cross_check_enabled, true);
 
         this._lastScreenHash = '';
         this._currentScene = { type: 'unknown', label: '未知', since: Date.now() };
@@ -19,8 +29,6 @@ class SceneDetector {
         this._changeCallbacks = [];
         this._timer = null;
         this._running = false;
-        this._pendingScene = null;
-        this._pendingCount = 0;
     }
 
     // ===== 公开接口 =====
@@ -87,34 +95,11 @@ class SceneDetector {
             if (hash === this._lastScreenHash) return;
             this._lastScreenHash = hash;
 
-            const scene = await this._classifyScene(screenshot);
+            const classifiedScene = await this._classifyScene(screenshot);
+            const scene = await this._crossCheckScene(classifiedScene);
             if (scene.type === this._currentScene.type) {
-                this._pendingScene = null;
-                this._pendingCount = 0;
                 return;
             }
-
-            // 场景惯性：沉浸型场景（gaming）不会因为一次误判就切走
-            // 游戏内的过场动画、对话界面、菜单等容易被误判为 video/reading
-            // 需要连续 2 次判定为非当前场景才真正切换
-            const IMMERSIVE_SCENES = ['gaming'];
-            const needsConfirm = IMMERSIVE_SCENES.includes(this._currentScene.type);
-
-            if (needsConfirm) {
-                if (this._pendingScene?.type === scene.type) {
-                    this._pendingCount++;
-                } else {
-                    this._pendingScene = scene;
-                    this._pendingCount = 1;
-                }
-                if (this._pendingCount < 2) {
-                    logToTerminal('info', `场景惯性: 当前${this._currentScene.label}，检测到${scene.label}(${this._pendingCount}/2)，暂不切换`);
-                    return;
-                }
-            }
-
-            this._pendingScene = null;
-            this._pendingCount = 0;
 
             const now = Date.now();
             const oldScene = {
@@ -155,6 +140,38 @@ class SceneDetector {
     _computeScreenHash(base64) {
         if (!base64) return '';
         return `${base64.length}:${base64.slice(0, 200)}:${base64.slice(-200)}`;
+    }
+
+    async _crossCheckScene(scene) {
+        if (scene.type !== 'gaming' || !this._windowCrossCheckEnabled || typeof detectGameFromProcesses !== 'function' || typeof getForegroundWindowProcess !== 'function') {
+            return scene;
+        }
+
+        try {
+            const foregroundWindow = await getForegroundWindowProcess();
+            if (!foregroundWindow) {
+                return scene;
+            }
+
+            const gameDetection = detectGameFromProcesses([foregroundWindow]);
+            if (gameDetection.detected) {
+                return scene;
+            }
+
+            if (SceneDetector._isCodingWindow(foregroundWindow)) {
+                logToTerminal('info', `窗口核对: 前台窗口「${foregroundWindow.windowTitle || foregroundWindow.processName}」更像编程，已阻止误切换到游戏`);
+                return { type: 'coding', label: '编程' };
+            }
+
+            if (this._currentScene.type && !['unknown', 'idle'].includes(this._currentScene.type)) {
+                logToTerminal('info', `窗口核对: 前台窗口「${foregroundWindow.windowTitle || foregroundWindow.processName}」未识别为游戏，保留当前场景${this._currentScene.label}`);
+                return { type: this._currentScene.type, label: this._currentScene.label };
+            }
+        } catch (e) {
+            logToTerminal('warn', `窗口核对失败: ${e.message}`);
+        }
+
+        return scene;
     }
 
     async _classifyScene(screenshotBase64) {
@@ -223,6 +240,13 @@ SceneDetector._toBool = function(val, defaultVal = true) {
     if (typeof val === 'boolean') return val;
     if (typeof val === 'string') return val.toLowerCase() !== 'false';
     return defaultVal;
+};
+
+SceneDetector._isCodingWindow = function(windowInfo) {
+    const processName = String(windowInfo?.processName || '').toLowerCase();
+    const windowTitle = String(windowInfo?.windowTitle || '').toLowerCase();
+    return CODING_PROCESS_KEYWORDS.some(keyword => processName.includes(keyword))
+        || CODING_WINDOW_KEYWORDS.some(keyword => windowTitle.includes(keyword));
 };
 
 module.exports = { SceneDetector };

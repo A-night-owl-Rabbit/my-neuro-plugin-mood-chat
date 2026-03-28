@@ -2,10 +2,12 @@
 
 为 my-neuro 类桌面语音/LLM 框架开发的心情主动对话插件。AI 的心情如潮汐般涨落——不仅自动调整主动对话的频率，还会实时影响 AI 的说话语气和态度。
 
-**v2.1 更新（本仓库）**
+**v2.2 更新（本仓库）**
 
 - **插件自包含**：`MoodChatModule.js` 已放入插件目录，通过 `index.js` 的 `require('./MoodChatModule.js')` 加载，**无需**再向 `live-2d/js/ai/` 拷贝任何文件，避免版本不一致导致的 `getMoodInjection.bind` 类错误。
 - **布尔配置**：心情注入开关等支持 schema 中的字符串 `"True"` / `"False"`，与 `plugin_config.json` 表现一致。
+- **自我视角评估**：初始心情评估与实时对话情感评估会读取当前角色的基础 system prompt，并强制以“肥牛本人”的视角判断情绪变化，不再采用旁观者式裁判打分。
+- **窗口核对**：当截图模型把场景识别为游戏时，可额外结合前台窗口标题与进程做二次核对，减少 IDE / 工具界面被误判成游戏场景。
 
 **v2.0：场景感知系统** — 通过截图 + 独立视觉模型识别用户当前活动场景，动态调整对话策略。游戏时多陪伴，编程时少打扰，工作结束时可触发收尾感对话。
 
@@ -16,11 +18,13 @@
 ### 心情系统（v1.0）
 
 1. **对话频率** — 心情好时更常主动说话，心情差时减少或沉默。  
-2. **说话态度** — 通过向 system prompt 注入「心情状态」影响语气（可开关）。
+2. **说话态度** — 通过向 system prompt 注入「心情状态」影响语气（可开关）。  
+3. **自我感受评估** — 启动评估与实时情感评估都按角色自身感受打分，而不是第三方裁判式分析。
 
 ### 场景感知（v2.0）
 
 - 定时截图，用 **VL 模型** 分类场景（编程 / 游戏 / 视频 / 办公 / 阅读 / 浏览 / 空闲等）。  
+- **窗口核对**：当视觉模型识别为游戏时，再结合前台窗口标题与进程二次确认。  
 - **间隔倍率**：陪伴型场景缩短间隔，专注型拉长间隔。  
 - **防重复**：专注型场景限制同场景连续主动对话次数。  
 - **任务收尾感**：长时间工作后切换到休闲场景时，可触发一句收尾话。  
@@ -36,8 +40,9 @@
 本仓库中的配置为**公开示例**：
 
 - **不含**任何 API Key（`api_key` 为空，请在本机填写）。  
-- **不含**完整评估类提示词范文；`initial_evaluation_prompt` 与 `sentiment_evaluation_prompt` 仅为占位说明，**克隆后请务必在本机补全**，否则心情评估效果受限。  
-- **不含**个人路径与角色定制长文案；`ai_log_folder` 等请按本机填写。
+- **不含**个人主动搭话长提示词；`prompt.value` 保持为通用占位，请在本机按角色与工具链自行补全。  
+- **包含**可直接参考的心情评估提示词示例：`initial_evaluation_prompt` 与 `sentiment_evaluation_prompt` 采用“肥牛本人”视角，可按需二次调整。  
+- **不含**个人路径与私有日志命名；`ai_log_folder`、日志文件名模板等请按本机填写。
 
 ---
 
@@ -45,7 +50,7 @@
 
 1. 将整个插件目录放到 `live-2d/plugins/built-in/mood-chat/` 或 `plugins/community/mood-chat/`。  
 2. 在 `enabled_plugins.json` 中加入 `"mood-chat"`。  
-3. 在本机编辑 `plugin_config.json`：填写 API Key、日志路径、评估与情感分析提示词等。
+3. 在本机编辑 `plugin_config.json`：填写 API Key、日志路径、主动搭话提示词，并按需要微调心情评估提示词。
 
 ---
 
@@ -55,7 +60,7 @@
 |------|------|
 | `index.js` | 插件入口：生命周期、LLM 钩子、挂载场景检测与 ProactiveEnhancer |
 | `MoodChatModule.js` | 心情核心：评估、持久化、调度、`getMoodInjection` 等 |
-| `SceneDetector.js` | 截图、视觉分类、场景变化与惯性 |
+| `SceneDetector.js` | 截图、视觉分类、场景变化、窗口核对与场景惯性 |
 | `ProactiveEnhancer.js` | 包装 `getChatInterval` / `executeChat` / `getMoodInjection`（场景系数、防重复、时间感知、收尾感） |
 | `metadata.json` | 插件元数据 |
 | `plugin_config.json` | 配置 schema（本仓库为脱敏示例） |
@@ -64,7 +69,7 @@
 
 ## 架构（自包含版）
 
-```
+```text
 index.js
   ├── ./MoodChatModule.js   （与插件同目录，不再依赖 js/ai/）
   ├── SceneDetector.js

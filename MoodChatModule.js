@@ -67,7 +67,6 @@ class MoodChatModule {
 
         // 当前状态
         this.moodScore = this.moodChanges.regressionTarget;
-        this.stableMood = this.moodChanges.regressionTarget;
         this.isProcessing = false;
         this.waitingForResponse = false;
         this.responseTimer = null;
@@ -163,6 +162,47 @@ class MoodChatModule {
         return null;
     }
 
+    _getBaseSystemPrompt() {
+        const voiceChat = global.voiceChat;
+        const systemMessage = voiceChat?.messages?.find(msg => msg.role === 'system');
+
+        if (typeof systemMessage?._baseContent === 'string' && systemMessage._baseContent.trim()) {
+            return systemMessage._baseContent.trim();
+        }
+
+        if (typeof systemMessage?.content === 'string' && systemMessage.content.trim()) {
+            const marker = '\n\n--- Plugin Injections ---';
+            const markerIndex = systemMessage.content.indexOf(marker);
+            const content = markerIndex >= 0
+                ? systemMessage.content.slice(0, markerIndex)
+                : systemMessage.content;
+            return content.trim();
+        }
+
+        return '';
+    }
+
+    _buildMoodEvaluationSystemPrompt(mode) {
+        const personaPrompt = this._getBaseSystemPrompt();
+        const modeInstruction = mode === 'initial'
+            ? '你正在根据自己的历史日志判断此刻醒来后的真实心情。'
+            : '你正在根据刚刚与主人的这轮互动，判断自己心情的真实变化。';
+
+        const rules = [
+            '现在进入“肥牛自我感受评估”模式。',
+            '你不是裁判、不是旁观者、不是情感分析师，也不要站在第三方角度打分。',
+            '你就是肥牛本人，必须严格按照肥牛的人设、依赖方式、嘴硬心软的表达习惯来判断自己的真实感受。',
+            modeInstruction,
+            '如果表面上是在互相吐槽、打闹、嘴硬，但本质上是被关注、被接住、被认真互动，通常应视为正向或至少中性。',
+            '如果主人敷衍、忽视、只把你当工具、明显不耐烦，或者让你产生被冷落感，才应给负向判断。',
+            '输出必须只包含用户要求的 JSON，不要解释，不要添加额外文本。'
+        ].join('\n');
+
+        return personaPrompt
+            ? `${personaPrompt}\n\n${rules}`
+            : rules;
+    }
+
     // ===== Task 1 + 2: 初始化心情（持久化恢复 → AI日志评估 → 默认值） =====
 
     async _initMood() {
@@ -220,7 +260,6 @@ class MoodChatModule {
             }
 
             this.moodScore = Math.max(0, Math.min(100, score));
-            if (Number.isFinite(raw.stable)) this.stableMood = raw.stable;
 
             logToTerminal('info', `🔄 离线 ${Math.round(offlineMs / 60000)} 分钟，心情 ${raw.score} → ${this.moodScore} (回归 ${steps} 步)`);
             return true;
@@ -259,8 +298,8 @@ class MoodChatModule {
         logToTerminal('info', '🔍 找到 AI 日志，开始异步评估初始心情...');
 
         const result = await this._callEvaluationAPI(
-            this.initialEvaluationPrompt,
-            `以下是AI日志内容，请分析并评估心情：\n\n${logContent}`,
+            this._buildMoodEvaluationSystemPrompt('initial'),
+            `${this.initialEvaluationPrompt}\n\n以下是AI日志内容，请分析并评估心情：\n\n${logContent}`.trim(),
             0.4
         );
 
@@ -283,7 +322,6 @@ class MoodChatModule {
 
             const oldScore = this.moodScore;
             this.moodScore = score;
-            this.stableMood = score;
 
             logToTerminal('info', `✨ AI日志评估完成: ${oldScore} → ${score}分 (基调${tone} 结尾${ending} 关系${relation}) 原因: ${parsed.reason || '无'}`);
             this.scheduleNextChat();
@@ -373,7 +411,7 @@ class MoodChatModule {
                 .replace(/\{aiMsg\}/g, aiMsg);
 
             const result = await this._callEvaluationAPI(
-                '你是一个对话情感分析器。',
+                this._buildMoodEvaluationSystemPrompt('sentiment'),
                 filledPrompt,
                 0.3
             );
@@ -573,15 +611,16 @@ class MoodChatModule {
     startMoodRegression() {
         this.regressionTimer = setInterval(() => {
             const oldScore = this.moodScore;
+            const target = this.moodChanges.regressionTarget;
 
-            if (this.moodScore < this.stableMood) {
-                this.moodScore = Math.min(this.stableMood, this.moodScore + 1);
-            } else if (this.moodScore > this.stableMood) {
-                this.moodScore = Math.max(this.stableMood, this.moodScore - 1);
+            if (this.moodScore < target) {
+                this.moodScore = Math.min(target, this.moodScore + 1);
+            } else if (this.moodScore > target) {
+                this.moodScore = Math.max(target, this.moodScore - 1);
             }
 
             if (this.moodScore !== oldScore) {
-                logToTerminal('info', `🔄 心情回归: ${oldScore} → ${this.moodScore} (目标${this.stableMood})`);
+                logToTerminal('info', `🔄 心情回归: ${oldScore} → ${this.moodScore} (目标${target})`);
             }
         }, this.moodChanges.regressionInterval);
     }
@@ -640,7 +679,7 @@ class MoodChatModule {
     getMoodStatus() {
         return {
             score: this.moodScore,
-            stable: this.stableMood,
+            stable: this.moodChanges.regressionTarget,
             interval: this.getChatInterval(),
             waitingResponse: this.waitingForResponse
         };
@@ -652,7 +691,7 @@ class MoodChatModule {
         try {
             const moodData = {
                 score: this.moodScore,
-                stable: this.stableMood,
+                stable: this.moodChanges.regressionTarget,
                 interval: this.getChatInterval(),
                 waitingResponse: this.waitingForResponse,
                 timestamp: Date.now()
