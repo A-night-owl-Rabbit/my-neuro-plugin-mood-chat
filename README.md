@@ -50,8 +50,7 @@
 
 1. 将整个插件目录放到 `live-2d/plugins/built-in/mood-chat/` 或 `plugins/community/mood-chat/`。  
 2. 在 `enabled_plugins.json` 中加入 `"mood-chat"`。  
-3. 在本机编辑 `plugin_config.json`：填写 API Key、日志路径、主动搭话提示词，并按需要微调心情评估提示词。
-
+3. 在本机编辑 `plugin_config.json`：填写 API Key、日志路径、主动搭话提示词，并按需要微调心情评估提示词。API地址需要https://XXXXXXX/v1/chat/completions格式
 ---
 
 ## 文件结构
